@@ -1,0 +1,48 @@
+{
+    "name": "copy-heroku-releases",
+    "description": "A node command line utility to copy Heroku slugs",
+    "version": "0.1.0",
+    "homepage": "https://github.com/raymcdermott/copy-heroku-releases",
+    "author": {
+        "name": "Ray McDermott",
+        "email": "ray@mcdermott.be"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/raymcdermott/copy-heroku-releases.git"
+    },
+    "bugs": {
+        "url": "https://github.com/raymcdermott/copy-heroku-releases/issues"
+    },
+    "licenses": [
+        {
+            "type": "MIT",
+            "url": "https://github.com/raymcdermott/copy-heroku-releases/blob/master/LICENSE-MIT"
+        }
+    ],
+    "main": "lib/copy-heroku-releases",
+    "engines": {
+        "node": ">= 0.8.0"
+    },
+    "devDependencies": {
+        "lazy.js": ">= 0.3.2",
+        "heroku-client": ">= 1.0.0",
+        "grunt-contrib-jshint": "~0.6.4",
+        "grunt-contrib-nodeunit": "~0.2.0",
+        "grunt-contrib-watch": "~0.5.3",
+        "grunt": "~0.4.2"
+    },
+    "keywords": [
+        "heroku",
+        "releases",
+        "slug"
+    ],
+    "preferGlobal": "true",
+    "bin": {
+        "copy-heroku-releases": "lib/copy-heroku-releases.js"
+    },
+    "dependencies": {
+        "lazy.js": ">= 0.3.2",
+        "heroku-client": "~1.0.0"
+    }
+}
