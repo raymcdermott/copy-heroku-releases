@@ -20,7 +20,7 @@
             "url": "https://github.com/raymcdermott/copy-heroku-releases/blob/master/LICENSE-MIT"
         }
     ],
-    "main": "lib/copy-heroku-releases",
+    "main": "copy-heroku-releases",
     "engines": {
         "node": ">= 0.8.0"
     },
@@ -39,7 +39,7 @@
     ],
     "preferGlobal": "true",
     "bin": {
-        "copy-heroku-releases": "lib/copy-heroku-releases.js"
+        "copy-heroku-releases": "copy-heroku-releases.js"
     },
     "dependencies": {
         "lazy.js": ">= 0.3.2",

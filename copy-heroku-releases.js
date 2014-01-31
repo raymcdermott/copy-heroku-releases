@@ -12,19 +12,20 @@
 
 // Assert pre-requisites
 var assert = require('assert');
-
 assert(process.env.HEROKU_API_TOKEN, "You must have HEROKU_API_TOKEN set in your environment");
 assert(process.env.TARGET_APPS, "You must have TARGET_APPS set in your environment");
 
 // Functional requires
-var fs = require('fs');
 var lazy = require('lazy.js');
-var restify = require('restify');
 var Heroku = require('heroku-client'),
     heroku = new Heroku({ token: process.env.HEROKU_API_TOKEN });
 
 // Command line options
-assert((process.argv.length >= 2), "You must specify appname [optional-release-number]");
+if (process.argv.length <= 2) {
+    console.error("You must specify appname [optional-release-number]");
+    return -1;
+}
+
 var app = process.argv[2];
 var requestedRelease = parseInt(process.argv[3]);
 
@@ -65,13 +66,17 @@ function processSlug(appName, requestedRelease) {
         var slugId = null;
 
         if (requestedRelease) {
-            var someRelease = lazy(responseBody).find(function (release) { return release.version === requestedRelease; });
+            var someRelease = lazy(responseBody).find(function (release) {
+                return release.version === requestedRelease;
+            });
 
             slugId = processRelease(someRelease, requestedRelease);
 
         } else {
             // By default use the latest release ... the response is not ordered
-            var latestRelease = lazy(responseBody).sortBy(function (release) { return release.version; }).last();
+            var latestRelease = lazy(responseBody).sortBy(function (release) {
+                return release.version;
+            }).last();
 
             slugId = processRelease(latestRelease, "[ most recent ]");
         }
