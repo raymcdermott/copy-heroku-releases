@@ -1,4 +1,4 @@
-# heroku-releases-slug-ids [![Build Status](https://secure.travis-ci.org/raymcdermott/heroku-releases-slug-ids.png?branch=master)](http://travis-ci.org/raymcdermott/heroku-releases-slug-ids)
+# copy-heroku-releases
 
 A node command line utility to copy Heroku slugs from one app to one or more other apps
 
@@ -9,7 +9,8 @@ FOr details of the Heroku platform API see
 https://blog.heroku.com/archives/2013/12/20/programmatically_release_code_to_heroku_using_the_platform_api
 
 ## Getting Started
-Install the command line utility with: `npm install -g heroku-releases-slug-ids`
+
+Install the command line utility with: `npm install -g copy-heroku-releases`
 
 You must have an account on Heroku
 
@@ -38,10 +39,11 @@ Copied slug 6b938191-f5a3-4033-a916-xyz to app test-deploy-xyz [created new app 
 Copied slug 6b938191-f5a3-4033-a916-xyz to app test-deploy-def [created new app version 9]
 
 ## Contributing
+
 In lieu of a formal styleguide, take care to maintain the existing coding style. Add unit tests for any new or changed functionality. Lint and test your code using [Grunt](http://gruntjs.com/).
 
 ## Release History
-0.3.0 - fully functional for me ... not 1.0.0 as I haven't socialised this enough yet :)
+0.8.0 - fully functional for me ... not 1.0.0 as I haven't socialised this enough yet :)
 
 ## License
 Copyright (c) 2014 Ray McDermott  

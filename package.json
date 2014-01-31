@@ -1,7 +1,7 @@
 {
     "name": "copy-heroku-releases",
     "description": "A node command line utility to copy Heroku slugs",
-    "version": "0.1.0",
+    "version": "0.8.0",
     "homepage": "https://github.com/raymcdermott/copy-heroku-releases",
     "author": {
         "name": "Ray McDermott",
