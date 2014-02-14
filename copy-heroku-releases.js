@@ -1,84 +1,92 @@
-#! /usr/bin/env node
+#!/usr/bin/env node
 
 'use strict';
 
 /*
- * copy-heroku-releases.js.js
- * https://github.com/raymcdermott/copy-heroku-releases.js.js
+ * copy-heroku-releases.js
+ * https://github.com/raymcdermott/copy-heroku-releases.js
  *
  * Copyright (c) 2014 Ray McDermott
  * Licensed under the MIT license.
  */
 
-// Assert pre-requisites
 var assert = require('assert');
-assert(process.env.HEROKU_API_TOKEN, "You must have HEROKU_API_TOKEN set in your environment");
-assert(process.env.TARGET_APPS, "You must have TARGET_APPS set in your environment");
-
-// Functional requires
-var lazy = require('lazy.js');
-var Heroku = require('heroku-client'),
-    heroku = new Heroku({ token: process.env.HEROKU_API_TOKEN });
 
 // Command line options
-if (process.argv.length <= 2) {
-    console.error("You must specify appname [optional-release-number]");
-    return -1;
-}
+assert((process.argv.length == 3 || process.argv.length == 4), "You must specify appname [optional-release-number]");
 
 var app = process.argv[2];
 var requestedRelease = parseInt(process.argv[3]);
 
-// Do the work
-function doCopy(appName, slugId) {
-    heroku.post('/apps/' + appName + '/releases/', { 'slug': slugId }, function (err, responseBody) {
-        assert.ifError(err, "Could not copy slug " + slugId + " to app " + appName);
+// Mandatory environment variables
+assert(process.env.HEROKU_API_TOKEN, "You must have HEROKU_API_TOKEN set in your environment");
+assert(process.env.TARGET_APPS, "You must have TARGET_APPS set in your environment");
 
-        console.log("Copied slug " + slugId + " to app " + appName + " [created new app version " + responseBody.version + "]");
-    });
-}
 
-// Copy the slug to each of the target apps
+var Heroku = require('heroku-client'),
+    heroku = new Heroku({ token: process.env.HEROKU_API_TOKEN });
 
-// TODO: Support a regex for the target apps
-function copySlug(slugId) {
-    var targetApps = process.env.TARGET_APPS.split(" ");
 
-    for (var i = 0; i < targetApps.length; i++) {
-        doCopy(targetApps[i], slugId);
-    }
-}
+processSlug(app, requestedRelease);
+
 
 // fetch the slug ids and execute the copying
 function processSlug(appName, requestedRelease) {
     heroku.get('/apps/' + appName + '/releases/', function (err, responseBody) {
         assert.ifError(err, "Could not get the releases from Heroku");
 
-        var releaseElement = null;
+        var release = getRelease(responseBody, requestedRelease);
 
-        if (requestedRelease) {
-            releaseElement = lazy(responseBody).find(function (release) {
-                return release.version === requestedRelease;
-            });
+        var slug = (getSlug(release));
 
-        } else {
-            // By default use the latest release ... the JSON is not ordered
-            releaseElement = lazy(responseBody).sortBy(function (release) {
-                return release.version;
-            }).last();
-        }
-
-        if (!releaseElement) {
-            return "Cannot find a release";
-        }
-
-        if (!releaseElement.slug) {
-            return "Cannot find a slug";
-        }
-
-        copySlug(releaseElement.slug.id);
+        copySlug(slug);
     });
 }
 
-// Entry point
-processSlug(app, requestedRelease);
+
+function getRelease(releases, requestedRelease) {
+    var lazy = require('lazy.js');
+
+    if (requestedRelease) {
+        return lazy(releases).find(function (release) {
+            return release.version === requestedRelease;
+        });
+    } else {
+        // By default use the latest release ... the response is not ordered
+        return lazy(releases).sortBy(function (release) {
+            return release.version;
+        }).last();
+    }
+}
+
+
+function getSlug(release) {
+    if (!release || !release.slug) {
+        throw new Error("Cannot find a valid slug ID in release " + JSON.stringify(release));
+    }
+
+    return release.slug.id;
+}
+
+
+function copySlug(slug) {
+    var targetApps = process.env.TARGET_APPS.split(" ");
+
+    for (var i = 0; i < targetApps.length; i++) {
+        var appName = targetApps[i];
+
+        heroku.post('/apps/' + appName + '/releases/', { 'slug': slug }, function (err, responseBody) {
+            assert.ifError(err, "Could not copy slug " + slug + " to app " + appName);
+
+            console.log("Copied slug " + slug + " to app " + appName + " [created new app version " + responseBody.version + "]");
+        });
+    }
+}
+
+// TODO: Support regex for target apps
+// TODO: Support deploying against another organisation
+function getAppsForOrganisation() {
+// Not available yet
+}
+
+
