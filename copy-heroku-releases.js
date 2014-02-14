@@ -29,17 +29,6 @@ if (process.argv.length <= 2) {
 var app = process.argv[2];
 var requestedRelease = parseInt(process.argv[3]);
 
-// Helper function to DRY the code
-function processRelease(release, releaseNumber) {
-    if (!release) {
-        return "Cannot find release " + releaseNumber;
-    } else if (!release.slug) {
-        return "Cannot find a slug for release " + releaseNumber;
-    } else {
-        return release.slug.id;
-    }
-}
-
 // Do the work
 function doCopy(appName, slugId) {
     heroku.post('/apps/' + appName + '/releases/', { 'slug': slugId }, function (err, responseBody) {
@@ -50,6 +39,8 @@ function doCopy(appName, slugId) {
 }
 
 // Copy the slug to each of the target apps
+
+// TODO: Support a regex for the target apps
 function copySlug(slugId) {
     var targetApps = process.env.TARGET_APPS.split(" ");
 
@@ -63,25 +54,29 @@ function processSlug(appName, requestedRelease) {
     heroku.get('/apps/' + appName + '/releases/', function (err, responseBody) {
         assert.ifError(err, "Could not get the releases from Heroku");
 
-        var slugId = null;
+        var releaseElement = null;
 
         if (requestedRelease) {
-            var someRelease = lazy(responseBody).find(function (release) {
+            releaseElement = lazy(responseBody).find(function (release) {
                 return release.version === requestedRelease;
             });
 
-            slugId = processRelease(someRelease, requestedRelease);
-
         } else {
-            // By default use the latest release ... the response is not ordered
-            var latestRelease = lazy(responseBody).sortBy(function (release) {
+            // By default use the latest release ... the JSON is not ordered
+            releaseElement = lazy(responseBody).sortBy(function (release) {
                 return release.version;
             }).last();
-
-            slugId = processRelease(latestRelease, "[ most recent ]");
         }
 
-        copySlug(slugId);
+        if (!releaseElement) {
+            return "Cannot find a release";
+        }
+
+        if (!releaseElement.slug) {
+            return "Cannot find a slug";
+        }
+
+        copySlug(releaseElement.slug.id);
     });
 }
 
