@@ -43,6 +43,8 @@ Copied slug 6b938191-f5a3-4033-a916-xyz to app test-deploy-def [created new app 
 In lieu of a formal styleguide, take care to maintain the existing coding style. Add unit tests for any new or changed functionality. Lint and test your code using [Grunt](http://gruntjs.com/).
 
 ## Release History
+0.8.2 - relies on the updated Heroku client now ... and I have more TODOs!
+0.8.1 - realised that it wasn't fully functional ... proxy patch
 0.8.0 - fully functional for me ... not 1.0.0 as I haven't socialised this enough yet :)
 
 ## License
