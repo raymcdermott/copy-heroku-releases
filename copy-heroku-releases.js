@@ -44,7 +44,12 @@ function findSlug() {
             throw new Error("Cannot find a valid slug ID in release " + JSON.stringify(release));
         }
 
-        return release.slug.id;
+        var slug = release.slug.id;
+
+        console.log("Source app: " + sourceApp + " source version: " + release.version
+            + " (\'" + release.description +  "\') source slug: " + slug);
+
+        return slug;
     });
 }
 
@@ -84,8 +89,10 @@ function performDeploy(slug, app) {
         return 0;
     }
 
-    heroku.post('/apps/' + app + '/releases/', { 'slug': slug }).then(function (response) {
-        console.log("Copied slug " + slug + " to app " + app + " [created new app version " + response.version + "]");
+    heroku.post('/apps/' + app + '/releases/', { 'slug': slug }).then(function (newRelease) {
+        console.log("User " + newRelease.user.email + " deployed slug "
+            + newRelease.slug.id + " to app " + app + " [created new app version "
+            + newRelease.version + " (\'" + newRelease.description +  "\')]");
     });
 }
 
