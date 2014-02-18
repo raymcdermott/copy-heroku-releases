@@ -114,7 +114,7 @@ function filterTargetApps(appList, regexFilter) {
 
         return false;
 
-    }).toArray(); // TODO: why is this needed ... returns list + lazy.js function names if not used :(
+    }).toArray();
 }
 
 // BIG MESS ... until Heroku supports getting the apps by organisation in the API, we will hack it...

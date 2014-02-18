@@ -63,6 +63,7 @@ Copied slug 4bd9fcde-c6b0-499d-9029 to app test-deploy-xyz [created new app vers
 In lieu of a formal styleguide, take care to maintain the existing coding style. Add unit tests for any new or changed functionality. Lint and test your code using [Grunt](http://gruntjs.com/).
 
 ## Release History
+0.8.4 - use promises and JSHint conformance
 0.8.3 - hack to support deploying apps by organisation
 0.8.2 - relies on the updated Heroku client now ... and I have more TODOs!
 0.8.1 - realised that it wasn't fully functional ... proxy patch
