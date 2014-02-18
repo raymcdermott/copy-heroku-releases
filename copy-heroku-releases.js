@@ -46,8 +46,8 @@ function findSlug() {
 
         var slug = release.slug.id;
 
-        console.log("Source app: " + sourceApp + " source version: " + release.version
-            + " (\'" + release.description +  "\') source slug: " + slug);
+        console.log("Source app: " + sourceApp + " source version: " + release.version + 
+            " (\'" + release.description +  "\') source slug: " + slug);
 
         return slug;
     });
@@ -71,16 +71,18 @@ function findReleaseToDeploy(releases) {
 function getTargetApps(organisation, filter) {
     var targetApps = getAppsForOrganisation(organisation);
 
-    if (filter)
+    if (filter) {
         targetApps = filterTargetApps(targetApps, filter.split(" "));
+    }
 
     return targetApps;
 }
 
 
 function deploySlug(slug, targetApps) {
-    for (var app in targetApps)
-        performDeploy(slug, targetApps[app]);
+    targetApps.forEach(function (app) {
+        performDeploy(slug, app);
+    });
 }
 
 function performDeploy(slug, app) {
@@ -90,21 +92,24 @@ function performDeploy(slug, app) {
     }
 
     heroku.post('/apps/' + app + '/releases/', { 'slug': slug }).then(function (newRelease) {
-        console.log("User " + newRelease.user.email + " deployed slug "
-            + newRelease.slug.id + " to app " + app + " [created new app version "
-            + newRelease.version + " (\'" + newRelease.description +  "\')]");
+        console.log("User " + newRelease.user.email + " deployed slug " + 
+            newRelease.slug.id + " to app " + app + " [created new app version " + 
+            newRelease.version + " (\'" + newRelease.description +  "\')]");
     });
 }
 
 // Filter the list of applications using the array of regular expressions
 function filterTargetApps(appList, regexFilter) {
-    if (!regexFilter)
+    if (!regexFilter) {
         return appList;
+    }
 
     return lazy(appList).filter(function (name) {
 
         for (var regex in regexFilter) {
-            if (name.match(regexFilter[regex])) return true;
+            if (name.match(regexFilter[regex])) {
+                return true;
+            }
         }
 
         return false;
