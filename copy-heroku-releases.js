@@ -26,84 +26,67 @@ assert(process.env.DEPLOY_TARGET_APP_FILTER, "You must set DEPLOY_TARGET_APP_FIL
 var sourceApp = process.env.DEPLOY_SOURCE_APPLICATION;
 var targetOrganisation = process.env.DEPLOY_TARGET_ORGANISATION;
 var targetAppFilter = process.env.DEPLOY_TARGET_APP_FILTER;
-
-
-// Optional environment variables
-var rehearsal = process.env.DEPLOY_REHEARSAL;
-var requestedRelease = process.env.DEPLOY_RELEASE_NUMBER;
-
-// Heroku set up requires authentication
 var heroku = new herokuClient({ token: process.env.DEPLOY_HEROKU_API_TOKEN });
 
 
-// Obtain the releases from Heroku to kick us off...
+// Use promises (from https://github.com/kriskowal/q) to minimize callbacks
 
-heroku.get('/apps/' + sourceApp + '/releases/', function (err, responseBody) {
-    assert.ifError(err, "Could not get the releases from Heroku");
-
-    deployRelease(sourceApp, responseBody, requestedRelease);
+findSlug().then(function (slug) {
+    deploySlug(slug, getTargetApps(targetOrganisation, targetAppFilter));
 });
 
 
-function deployRelease(sourceApp, releases, requestedRelease) {
+function findSlug() {
+    return heroku.get('/apps/' + sourceApp + '/releases/').then(function (releases) {
+        var release = findReleaseToDeploy(releases);
 
-    var release = findReleaseToDeploy(releases, requestedRelease);
-
-    var slug = findSlug(release);
-
-    console.log("Deploying from " + sourceApp + " release " + release.version + " (\'" + release.description + "\') with slug " + slug);
-
-    var targetApps = getAppsForOrganisation(targetOrganisation);
-
-    if (targetAppFilter) {
-        targetAppFilter = targetAppFilter.split(" ");
-        targetApps = filterTargetApps(targetApps, targetAppFilter);
-    }
-
-    if (rehearsal) {
-        console.log("Rehearsal mode ... would deploy slug to the following apps in organisation " + targetOrganisation);
-        for (var targetApp = 0; targetApp < targetApps.length; targetApp++) {
-            console.log(targetApps[targetApp]);
+        if (!release || !release.slug) {
+            throw new Error("Cannot find a valid slug ID in release " + JSON.stringify(release));
         }
-        return 0;
-    }
 
-    deploySlug(slug, targetApps);
+        return release.slug.id;
+    });
 }
 
-function findReleaseToDeploy(releases, requestedRelease) {
-    if (requestedRelease) {
-        return lazy(releases).find(function (release) {
-            return release.version === requestedRelease;
+function findReleaseToDeploy(releases) {
+    var release = null;
+    if (process.env.DEPLOY_RELEASE_NUMBER) {
+        release = lazy(releases).find(function (release) {
+            return release.version === process.env.DEPLOY_RELEASE_NUMBER;
         });
     } else {
         // By default use the latest release ... the response is not ordered
-        return lazy(releases).sortBy(function (release) {
+        release = lazy(releases).sortBy(function (release) {
             return release.version;
         }).last();
     }
+    return release;
 }
 
+function getTargetApps(organisation, filter) {
+    var targetApps = getAppsForOrganisation(organisation);
 
-function findSlug(release) {
-    if (!release || !release.slug) {
-        throw new Error("Cannot find a valid slug ID in release " + JSON.stringify(release));
-    }
+    if (filter)
+        targetApps = filterTargetApps(targetApps, filter.split(" "));
 
-    return release.slug.id;
+    return targetApps;
 }
 
 
 function deploySlug(slug, targetApps) {
-    for (var i = 0; i < targetApps.length; i++) {
-        var appName = targetApps[i];
+    for (var app in targetApps)
+        performDeploy(slug, targetApps[app]);
+}
 
-        heroku.post('/apps/' + appName + '/releases/', { 'slug': slug }, function (err, responseBody) {
-            assert.ifError(err, "Could not copy slug " + slug + " to app " + appName);
-
-            console.log("Copied slug " + slug + " to app " + appName + " [created new app version " + responseBody.version + "]");
-        });
+function performDeploy(slug, app) {
+    if (process.env.DEPLOY_REHEARSAL) {
+        console.log("** Rehearsal mode ** ... would deploy slug " + slug + " to " + app);
+        return 0;
     }
+
+    heroku.post('/apps/' + app + '/releases/', { 'slug': slug }).then(function (response) {
+        console.log("Copied slug " + slug + " to app " + app + " [created new app version " + response.version + "]");
+    });
 }
 
 // Filter the list of applications using the array of regular expressions
@@ -113,8 +96,8 @@ function filterTargetApps(appList, regexFilter) {
 
     return lazy(appList).filter(function (name) {
 
-        for (var i = 0; i < regexFilter.length; i++) {
-            if (name.match(regexFilter[i])) return true;
+        for (var regex in regexFilter) {
+            if (name.match(regexFilter[regex])) return true;
         }
 
         return false;
