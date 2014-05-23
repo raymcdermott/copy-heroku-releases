@@ -37,6 +37,8 @@ console.log('DEBUG env-var DEPLOY_TARGET_APP_FILTER: ' + targetAppFilter);
 
 // Use promises (from https://github.com/kriskowal/q - which comes along with heroku-client) to minimize callbacks
 
+checkAccount();
+
 findSlug().then(function (slug) {
     if (debug === 'true') {
         console.log('DEBUG ready to deploy slug: ' + slug);
@@ -44,8 +46,14 @@ findSlug().then(function (slug) {
     deploySlug(slug, getTargetApps(targetOrganisation, targetAppFilter));
 });
 
+function checkAccount() {
+    return heroku.get('/account').then(function (user) {
+        console.log("We are deploying with account: " + JSON.stringify(user));
+    });
+}
 
 function findSlug() {
+
     var getUrl = '/apps/' + sourceApp + '/releases/';
 
     if (debug === 'true') {
