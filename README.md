@@ -38,9 +38,11 @@ Note: the target apps can be a list of regular app names or a list of regexes or
 
 Optional parameters
 
-You can run a rehearsal of the deployment by setting DEPLOY_REHEARSAL (any value). This will list the action that the program would take but prevents execution.
+You can run a rehearsal of the deployment by setting DEPLOY_REHEARSAL to true. This will list the action that the program would take but prevents execution.
 
 You can request an explicit release setting DEPLOY_RELEASE_NUMBER. This will use the specific release rather than the latest.
+
+You can obtain a DEBUG trace by setting DEPLOY_DEBUG to true
 
 ## Errors
 
@@ -52,7 +54,7 @@ If the requested release number is not present this is reported as an error
 
 $ copy-heroku-releases
 
-Deploying from test-deploy-app release 27 ('stable feature xxx v0.3.1') with slug 4bd9fcde-c6b0-499d-9029
+Source app: bamboo-test-deploy-app source version: 27 ('Rollback to v25') source slug: 4bd9fcde-c6b0-499d-9029
 
 Copied slug 4bd9fcde-c6b0-499d-9029 to app test-deploy-xyz [created new app version 36]
 
@@ -63,6 +65,7 @@ Copied slug 4bd9fcde-c6b0-499d-9029 to app test-deploy-xyz [created new app vers
 In lieu of a formal styleguide, take care to maintain the existing coding style. Add unit tests for any new or changed functionality. Lint and test your code using [Grunt](http://gruntjs.com/).
 
 ## Release History
+0.8.5 - added DEBUG option
 0.8.4 - use promises and JSHint conformance
 0.8.3 - hack to support deploying apps by organisation
 0.8.2 - relies on the updated Heroku client now ... and I have more TODOs!
