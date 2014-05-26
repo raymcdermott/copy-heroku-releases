@@ -161,7 +161,7 @@ function performDeploy(slug, app) {
             newRelease.version + " (\'" + newRelease.description + "\')]");
 
         if (debug === 'true') {
-            console.log('DEBUG in performDeploy(), full release data: ' + newRelease);
+            console.log('DEBUG in performDeploy(), full release data: ' + JSON.stringify(newRelease));
         }
     });
 }
