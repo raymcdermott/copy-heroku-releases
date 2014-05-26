@@ -43,6 +43,8 @@
     },
     "dependencies": {
         "lazy.js": ">= 0.3.2",
+        "yargs": ">= 1.2.2",
+        "mongodb": ">= 1.4.5",
         "heroku-client": ">= 1.1.0"
     }
 }

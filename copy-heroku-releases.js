@@ -29,22 +29,33 @@ var sourceApp = process.env.DEPLOY_SOURCE_APPLICATION;
 var targetOrganisation = process.env.DEPLOY_TARGET_ORGANISATION;
 var targetAppFilter = process.env.DEPLOY_TARGET_APP_FILTER;
 var heroku = new herokuClient({ token: process.env.DEPLOY_HEROKU_API_TOKEN });
+var argv = require('yargs').argv;
 
-console.log('DEBUG env-var DEPLOY_SOURCE_APPLICATION: ' + sourceApp);
-console.log('DEBUG env-var DEPLOY_TARGET_ORGANISATION: ' + targetOrganisation);
-console.log('DEBUG env-var DEPLOY_TARGET_APP_FILTER: ' + targetAppFilter);
+if (debug === 'true') {
+    console.log('DEBUG env-var DEPLOY_SOURCE_APPLICATION: ' + sourceApp);
+    console.log('DEBUG env-var DEPLOY_TARGET_ORGANISATION: ' + targetOrganisation);
+    console.log('DEBUG env-var DEPLOY_TARGET_APP_FILTER: ' + targetAppFilter);
+}
 
+// -s slug-id -t target-app1 -t target-app2
+var slug = argv.s;
+var targets = argv.t;
 
 // Use promises (from https://github.com/kriskowal/q - which comes along with heroku-client) to minimize callbacks
 
-checkAccount();
+deploy(slug, targets);
 
-findSlug().then(function (slug) {
-    if (debug === 'true') {
-        console.log('DEBUG ready to deploy slug: ' + slug);
-    }
-    deploySlug(slug, getTargetApps(targetOrganisation, targetAppFilter));
-});
+function deploy(slug, targets) {
+
+    console.log('slug: ' + slug);
+    console.log('targets: ' + targets);
+
+    return -1;
+
+//    checkAccount();
+//    deploySlug(slug, targets);
+}
+
 
 function checkAccount() {
     return heroku.get('/account').then(function (user) {

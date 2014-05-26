@@ -18,6 +18,8 @@ var herokuClient = require('heroku-client');
 var appRelease = require("./app-releases");
 var argv = require('yargs').argv;
 
+var debug = process.env.DEPLOY_DEBUG; // if this is set to "true" we will emit debug messages
+
 // Mandatory environment variables
 assert(process.env.DEPLOY_HEROKU_API_TOKEN, "You must set DEPLOY_HEROKU_API_TOKEN in your environment");
 assert(process.env.MONGOLAB_URI, "You must set MONGOLAB_URI in your environment");
@@ -25,19 +27,26 @@ assert(process.env.MONGOLAB_URI, "You must set MONGOLAB_URI in your environment"
 var heroku = new herokuClient({ token: process.env.DEPLOY_HEROKU_API_TOKEN });
 var mongoClient = require('mongodb').MongoClient, format = require('util').format;
 
-// --save-release
-saveRelease();
+if (argv.release) {
+    console.log('recording release');
+    saveRelease();
+} else if (argv.deploy) {
+    console.log('running deploy');
+    deployRelease(argv._);
+} else if (argv.configure) {
+    return console.log('running configure');
+} else {
+    return console.error('bad option');
+}
 
 function saveRelease() {
     var application = validateApp();
     findReleaseData(application, recordLastRelease);
 }
 
-// --deploy target-app [ target-app2, ... ]
-function deployRelease(version, targetApps) {
-    var application = validateApp();
-    findReleaseData(application, recordDeploy, version);
-    findReleaseData(application, recordDeploy, version);
+function deployRelease(targetApps) {
+    var application = validateApp(targetApps);
+    findReleaseData(application, deploySlug);
 }
 
 // --clone-configuration [ --exclude env-var1, --exclude env-var2, ... ] target-app [ target-app2, ... ]
@@ -51,10 +60,16 @@ function findDeclaredApplicationRequirements() {
 
     var rj = 'require.json';
 
-    return JSON.parse(fs.readFileSync(rj).toString());
+    var exists = fs.existsSync(function (exists) {
+        return exists;
+    });
+
+    if (exists) {
+        return JSON.parse(fs.readFileSync(rj).toString());
+    }
 }
 
-function validateApp() {
+function validateApp(targetApps) {
 
     // Only supports node apps ...
     var fs = require('fs');
@@ -65,6 +80,8 @@ function validateApp() {
 
     if (!(appDefinition && appDefinition.name ))
         throw new Error('Cannot parse ' + pj + ' FAIL - release not supported');
+
+    appDefinition.parameterTargetApps = targetApps;
 
     return appDefinition;
 }
@@ -103,11 +120,12 @@ function updateReleaseDocumentFromApplication(releaseDocument, application) {
         releaseDocument.app.requires = requirements;
     }
     releaseDocument.app.version = application.version;
+    releaseDocument.targets = application.parameterTargetApps.slice();
 
     return releaseDocument;
 }
 
-function findReleaseData(application, callback, version) {
+function findReleaseData(application, callback) {
 
     mongoClient.connect(process.env.MONGOLAB_URI, function (err, db) {
         if (err) {
@@ -125,7 +143,7 @@ function findReleaseData(application, callback, version) {
                 db.close();
                 releaseData = updateReleaseDocumentFromApplication(releaseData, application);
                 console.log('fromdb - data:' + JSON.stringify(releaseData));
-                callback(releaseData, version);
+                callback(releaseData);
             }
             else {
                 var releaseDocument = appRelease.releaseDocument(application).releaseHistory();
@@ -143,58 +161,62 @@ function findReleaseData(application, callback, version) {
 
                     console.log('intodb - data:' + JSON.stringify(releaseData[0]));
 
-                    callback(releaseData[0], version);
+                    callback(releaseData[0]);
                 });
             }
         });
     });
 }
 
-function recordDeploy(releaseData, version) {
-    var found = lazy(releaseData.releases.deploys).findWhere({ 'id': '1' });
-
-    var found = lazy(releaseData.releases.deploys).find(function(deploy) {
+function recordDeploy(releaseData) {
+    var found = lazy(releaseData.releases.deploys).find(function (deploy) {
         return deploy.version === version;
     });
 
     if (!found) {
-        var latestRelease = appRelease.releaseDocument().release();
-        latestRelease.id = herokuReleaseData.id;
-        latestRelease.herokuReleaseData = herokuReleaseData;
-
-        releaseData.releases.push(latestRelease);
+        // TODO record deploy stuff
 
         updateReleaseHistory(releaseData);
+    } else {
+        console.warn('WARNING - This release is a duplicate so it has not been recorded');
     }
+
 }
 
 function recordLastRelease(releaseData) {
 
     // TODO - is there a mock for the release API?
-    var herokuReleaseData = { 'id': '1' };
+//    var herokuReleaseData = { 'id': '1' };
 
-//    var herokuReleaseData = heroku.get('/apps/' + releaseData.app.name + '/releases/').then(function (releases) {
-//        // Find the latest release ... the release list in the response is not ordered by version or date
-//        lazy(releases).sortBy(function (release) {
-//            return release.version;
-//        }).last();
-//    });
+    var appUrl = '/apps/' + releaseData.app.name + '/releases/';
 
-    var found = lazy(releaseData.releases).find(function(release) {
-        return release.herokuReleaseData.id === herokuReleaseData.id; // TODO fix the match once we have the real data from Heroku
+    console.info('Fetching release data from: ' + appUrl);
+
+    heroku.get(appUrl).then(function (releases) {
+        // Find the latest release ... the release list in the response is not ordered by version or date
+        var herokuReleaseData = lazy(releases).sortBy(function (release) {
+            return release.version;
+        }).last();
+
+        var found = lazy(releaseData.releases).find(function (release) {
+            return release.herokuReleaseData.id === herokuReleaseData.id; // TODO fix the match once we have the real data from Heroku
+        });
+
+        if (!found) {
+            var latestRelease = appRelease.releaseDocument().release();
+            latestRelease.id = herokuReleaseData.id;
+            latestRelease.herokuReleaseData = herokuReleaseData;
+
+            releaseData.releases.push(latestRelease);
+
+            updateReleaseHistory(releaseData);
+        } else {
+            console.warn('WARNING - This release is a duplicate so it has not been recorded');
+        }
+    }).catch(function (error) {
+        console.error(JSON.stringify(error));
+        return new Error(JSON.stringify(error));
     });
-
-    if (!found) {
-        var latestRelease = appRelease.releaseDocument().release();
-        latestRelease.id = herokuReleaseData.id;
-        latestRelease.herokuReleaseData = herokuReleaseData;
-
-        releaseData.releases.push(latestRelease);
-
-        updateReleaseHistory(releaseData);
-    } else {
-        log.warn('WARNING - This release is a duplicate so it has not been recorded');
-    }
 }
 
 function updateReleaseHistory(releaseHistory) {
@@ -207,28 +229,26 @@ function updateReleaseHistory(releaseHistory) {
             if (err) {
                 throw new Error('Problem updating data: ' + JSON.stringify(releaseHistory));
             } else if (updateCount != 1) {
-                log.warn('Update count of ' + updateCount + ' was not expected (should be exactly 1)')
+                console.warn('Update count of ' + updateCount + ' was not expected (should be exactly 1)')
             }
             db.close();
         });
     });
 }
 
-function findSlug() {
-    return heroku.get('/apps/' + sourceApp + '/releases/').then(function (releases) {
-        var release = findReleaseToDeploy(releases);
+function findSlug(releases) {
+    var release = findReleaseToDeploy(releases);
 
-        if (!release || !release.slug) {
-            throw new Error("Cannot find a valid slug ID in release " + JSON.stringify(release));
-        }
+    if (!release || !release.slug) {
+        throw new Error("Cannot find a valid slug ID in release " + JSON.stringify(release));
+    }
 
-        var slug = release.slug.id;
+    var slug = release.slug.id;
 
-        console.log("Source app: " + sourceApp + " source version: " + release.version +
-            " (\'" + release.description + "\') source slug: " + slug);
+    console.log("Source app: " + sourceApp + " source version: " + release.version +
+        " (\'" + release.description + "\') source slug: " + slug);
 
-        return slug;
-    });
+    return slug;
 }
 
 function findReleaseToDeploy(releases) {
@@ -256,25 +276,6 @@ function getTargetApps(organisation, filter) {
     return targetApps;
 }
 
-
-function deploySlug(slug, targetApps) {
-    targetApps.forEach(function (app) {
-        performDeploy(slug, app);
-    });
-}
-
-function performDeploy(slug, app) {
-    if (process.env.DEPLOY_REHEARSAL) {
-        console.log("** Rehearsal mode ** ... would deploy slug " + slug + " to " + app);
-        return 0;
-    }
-
-    heroku.post('/apps/' + app + '/releases/', { 'slug': slug }).then(function (newRelease) {
-        console.log("User " + newRelease.user.email + " deployed slug " +
-            newRelease.slug.id + " to app " + app + " [created new app version " +
-            newRelease.version + " (\'" + newRelease.description + "\')]");
-    });
-}
 
 // Filter the list of applications using the array of regular expressions
 function filterTargetApps(appList, regexFilter) {
@@ -310,6 +311,48 @@ function getAppsForOrganisation(organisation) {
     var appListFile = "/tmp/heroku-app-list." + organisation;
 
     return fs.readFileSync(appListFile).toString().split("\n");
+}
+
+function deploySlug(releaseData) {
+    if (debug === 'true') {
+        console.log('DEBUG in deploySlug(), will deploy slug: ' + slug + ' to list: ' + targetApps);
+    }
+
+    if (releaseData.targets.length === 0) {
+        console.log('FAIL no matching targets');
+        return -1;
+    }
+
+    var slug = findSlug(releaseData.releases);
+
+    releaseData.targets.forEach(function (app) {
+        performDeploy(slug, app);
+    });
+}
+
+function performDeploy(slug, app) {
+    var rehearsal = process.env.DEPLOY_REHEARSAL;
+
+    if (rehearsal === 'true') {
+        console.log("** Rehearsal mode ** ... would deploy slug " + slug + " to " + app);
+        return 0;
+    }
+
+    var postUrl = '/apps/' + app + '/releases/';
+
+    if (debug === 'true') {
+        console.log('DEBUG in performDeploy(), posting to: ' + postUrl);
+    }
+
+    heroku.post(postUrl, { 'slug': slug }).then(function (newRelease) {
+        console.log("User " + newRelease.user.email + " deployed slug " +
+            newRelease.slug.id + " to app " + app + " [created new app version " +
+            newRelease.version + " (\'" + newRelease.description + "\')]");
+
+        if (debug === 'true') {
+            console.log('DEBUG in performDeploy(), full release data: ' + JSON.stringify(newRelease));
+        }
+    });
 }
 
 
