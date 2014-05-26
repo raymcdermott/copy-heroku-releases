@@ -15,23 +15,73 @@
 var assert = require('assert');
 var lazy = require('lazy.js');
 var herokuClient = require('heroku-client');
-var mongoClient = require('mongodb').MongoClient, format = require('util').format;
+var appRelease = require("./app-releases");
+var argv = require('yargs').argv;
 
 // Mandatory environment variables
 assert(process.env.DEPLOY_HEROKU_API_TOKEN, "You must set DEPLOY_HEROKU_API_TOKEN in your environment");
 assert(process.env.MONGOLAB_URI, "You must set MONGOLAB_URI in your environment");
 
 var heroku = new herokuClient({ token: process.env.DEPLOY_HEROKU_API_TOKEN });
+var mongoClient = require('mongodb').MongoClient, format = require('util').format;
 
-// Options:
-// save-last-release ... save the latest release to the release database
+// --save-release
+saveRelease();
 
-// Process command line arguments
-var argv = require('yargs').argv;
+function saveRelease() {
+    var application = validateApp();
+    findReleaseData(application, recordLastRelease);
+}
 
-var sourceApp = argv._; // more to come, for now there should just be the app name
+// --deploy target-app [ target-app2, ... ]
+function deployRelease(version, targetApps) {
+    var application = validateApp();
+    findReleaseData(application, recordDeploy, version);
+    findReleaseData(application, recordDeploy, version);
+}
 
-recordLastRelease(sourceApp);
+// --clone-configuration [ --exclude env-var1, --exclude env-var2, ... ] target-app [ target-app2, ... ]
+function cloneConfiguration(targetApp) {
+    //TODO
+}
+
+
+function findDeclaredApplicationRequirements() {
+    var fs = require('fs');
+
+    var rj = 'require.json';
+
+    return JSON.parse(fs.readFileSync(rj).toString());
+}
+
+function validateApp() {
+
+    // Only supports node apps ...
+    var fs = require('fs');
+
+    var pj = 'package.json';
+
+    var appDefinition = JSON.parse(fs.readFileSync(pj).toString());
+
+    if (!(appDefinition && appDefinition.name ))
+        throw new Error('Cannot parse ' + pj + ' FAIL - release not supported');
+
+    return appDefinition;
+}
+
+
+//recordLastRelease(sourceApp).then(function save(herokuRelease) {
+//
+//    var releaseHistory = appRelease.release(sourceApp).releaseHistory();
+//
+//    var release = appRelease.release(sourceApp).release();
+//
+//    release.herokuReleaseData = herokuRelease;
+//
+//    releaseHistory.releases.push(release);
+//
+//    storeReleaseData(releaseHistory);
+//});
 
 // Use promises (from https://github.com/kriskowal/q) to minimize callbacks
 
@@ -39,54 +89,128 @@ recordLastRelease(sourceApp);
 //    deploySlug(slug, getTargetApps(targetOrganisation, targetAppFilter));
 //});
 
-function storeReleaseData(application, release) {
-
-    console.log("app" + application);
-    console.log("release" + release);
-
-    mongoClient.connect(process.env.MONGOLAB_URI, function (err, db) {
-        if (err) throw err;
-
-        var collection = db.collection('test_insert');
-        collection.insert({a: 2}, function (err, docs) {
-
-            collection.count(function (err, count) {
-                console.log(format("count = %s", count));
-            });
-
-            // Locate all the entries using find
-            collection.find().toArray(function (err, results) {
-                console.dir(results);
-                // Let's close the db
-                db.close();
-            });
-        });
-    })
+// CRUD ops needed for the document
+function fetchAppReleaseHistory(release) {
+}
+function updateAppReleaseHistory(release) {
+}
+function createAppReleaseHistory(release) {
 }
 
-function recordLastRelease(sourceApp) {
-    heroku.get('/apps/' + sourceApp + '/releases/').then(function (releases) {
+function updateReleaseDocumentFromApplication(releaseDocument, application) {
+    var requirements = findDeclaredApplicationRequirements();
+    if (requirements) {
+        releaseDocument.app.requires = requirements;
+    }
+    releaseDocument.app.version = application.version;
 
-        console.log("releases " + releases);
+    return releaseDocument;
+}
 
-        // Find the latest release ... the release list in the response is not ordered
-        var release = releases[0];
+function findReleaseData(application, callback, version) {
 
-        console.log("release " + JSON.stringify(release));
+    mongoClient.connect(process.env.MONGOLAB_URI, function (err, db) {
+        if (err) {
+            throw new Error('Problem accessing data in MongoDB: ' + process.env.MONGOLAB_URI + '. Error: ' + err);
+        }
 
-//        sortBy(function (release) {
+        var collection = db.collection('releases');
+
+        collection.findOne({'app.name': application.name}, function (err, releaseData) {
+            if (err) {
+                throw new Error('Problem accessing data in for ' + application.name);
+            }
+
+            if (releaseData) {
+                db.close();
+                releaseData = updateReleaseDocumentFromApplication(releaseData, application);
+                console.log('fromdb - data:' + JSON.stringify(releaseData));
+                callback(releaseData, version);
+            }
+            else {
+                var releaseDocument = appRelease.releaseDocument(application).releaseHistory();
+
+                updateReleaseDocumentFromApplication(releaseDocument, application);
+
+                collection.insert(releaseDocument, {w: 1}, function (err, releaseData) {
+                    if (err) {
+                        throw new Error('Problem inserting data ' + JSON.stringify(releaseDocument));
+                    } else if (releaseData.length !== 1) {
+                        console.warn(releaseData.length + ' results from insert - should be just 1. Check this: ' + JSON.stringify(releaseData));
+                    }
+
+                    db.close();
+
+                    console.log('intodb - data:' + JSON.stringify(releaseData[0]));
+
+                    callback(releaseData[0], version);
+                });
+            }
+        });
+    });
+}
+
+function recordDeploy(releaseData, version) {
+    var found = lazy(releaseData.releases.deploys).findWhere({ 'id': '1' });
+
+    var found = lazy(releaseData.releases.deploys).find(function(deploy) {
+        return deploy.version === version;
+    });
+
+    if (!found) {
+        var latestRelease = appRelease.releaseDocument().release();
+        latestRelease.id = herokuReleaseData.id;
+        latestRelease.herokuReleaseData = herokuReleaseData;
+
+        releaseData.releases.push(latestRelease);
+
+        updateReleaseHistory(releaseData);
+    }
+}
+
+function recordLastRelease(releaseData) {
+
+    // TODO - is there a mock for the release API?
+    var herokuReleaseData = { 'id': '1' };
+
+//    var herokuReleaseData = heroku.get('/apps/' + releaseData.app.name + '/releases/').then(function (releases) {
+//        // Find the latest release ... the release list in the response is not ordered by version or date
+//        lazy(releases).sortBy(function (release) {
 //            return release.version;
 //        }).last();
+//    });
 
-//        console.log("release " + release.slug.id);
+    var found = lazy(releaseData.releases).find(function(release) {
+        return release.herokuReleaseData.id === herokuReleaseData.id; // TODO fix the match once we have the real data from Heroku
+    });
 
-//        if (!release || release.slug === null) {
-//            throw new Error("Cannot find a valid slug ID in release " + JSON.stringify(release));
-//        }
+    if (!found) {
+        var latestRelease = appRelease.releaseDocument().release();
+        latestRelease.id = herokuReleaseData.id;
+        latestRelease.herokuReleaseData = herokuReleaseData;
 
-        console.log("release 2 " + release);
+        releaseData.releases.push(latestRelease);
 
-        storeReleaseData(sourceApp, release);
+        updateReleaseHistory(releaseData);
+    } else {
+        log.warn('WARNING - This release is a duplicate so it has not been recorded');
+    }
+}
+
+function updateReleaseHistory(releaseHistory) {
+    mongoClient.connect(process.env.MONGOLAB_URI, function (err, db) {
+        if (err) {
+            throw new Error('Problem accessing data in MongoDB: ' + process.env.MONGOLAB_URI + '. Error: ' + err);
+        }
+
+        db.collection('releases').update({_id: releaseHistory._id }, releaseHistory, function (err, updateCount) {
+            if (err) {
+                throw new Error('Problem updating data: ' + JSON.stringify(releaseHistory));
+            } else if (updateCount != 1) {
+                log.warn('Update count of ' + updateCount + ' was not expected (should be exactly 1)')
+            }
+            db.close();
+        });
     });
 }
 
@@ -187,5 +311,6 @@ function getAppsForOrganisation(organisation) {
 
     return fs.readFileSync(appListFile).toString().split("\n");
 }
+
 
 
