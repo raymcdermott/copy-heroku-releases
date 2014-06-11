@@ -29,7 +29,6 @@ var sourceApp = process.env.DEPLOY_SOURCE_APPLICATION;
 var targetOrganisation = process.env.DEPLOY_TARGET_ORGANISATION;
 var targetAppFilter = process.env.DEPLOY_TARGET_APP_FILTER;
 var heroku = new herokuClient({ token: process.env.DEPLOY_HEROKU_API_TOKEN });
-var argv = require('yargs').argv;
 
 if (debug === 'true') {
     console.log('DEBUG env-var DEPLOY_SOURCE_APPLICATION: ' + sourceApp);
@@ -37,32 +36,24 @@ if (debug === 'true') {
     console.log('DEBUG env-var DEPLOY_TARGET_APP_FILTER: ' + targetAppFilter);
 }
 
-// -s slug-id -t target-app1 -t target-app2
-var slug = argv.s;
-var targets = argv.t;
-
 // Use promises (from https://github.com/kriskowal/q - which comes along with heroku-client) to minimize callbacks
 
-deploy(slug, targets);
+checkAcount();
 
-function deploy(slug, targets) {
-
-    console.log('slug: ' + slug);
-    console.log('targets: ' + targets);
-
+findSlug().then(function (slug) {
+    getTargetApps(targetOrganisation, targetAppFilter).then(function (targetApps) {
+        deploySlug(slug, targetApps);
+    });
+}).catch(function (error) {
+    console.log(error);
     return -1;
+});
 
-//    checkAccount();
-//    deploySlug(slug, targets);
-}
-
-
-function checkAccount() {
-    return heroku.get('/account').then(function (user) {
+function checkAcount() {
+    heroku.get('/account').then(function (user) {
         console.log("We are deploying with account: " + JSON.stringify(user));
     });
 }
-
 function findSlug() {
 
     var getUrl = '/apps/' + sourceApp + '/releases/';
@@ -119,27 +110,31 @@ function getTargetApps(organisation, filter) {
         console.log('DEBUG in getTargetApps(), selecting target apps for organisation: ' + organisation + ' using filter: ' + filter);
     }
 
-    var targetApps = getAppsForOrganisation(organisation);
+    var getUrl = '/organizations/' + organisation + '/apps';
 
-    if (debug === 'true') {
-        console.log('DEBUG in getTargetApps(), found the list of apps for organisation: ' + organisation + ' list: ' + targetApps);
-    }
+    return heroku.get(getUrl).then(function (apps) {
 
-    if (filter) {
-        targetApps = filterTargetApps(targetApps, filter.split(" "));
-    }
+        if (debug === 'true') {
+            console.log('DEBUG in getTargetApps(), found the list of apps for organisation: ' + organisation + ' list: ' + apps);
+        }
 
-    if (debug === 'true') {
-        console.log('DEBUG in getTargetApps(), filtered the list of apps for organisation: ' + organisation + ' filtered list: ' + targetApps);
-    }
+        if (filter) {
+            apps = filterTargetApps(apps, filter.split(" "));
+        }
 
-    return targetApps;
+        if (debug === 'true') {
+            console.log('DEBUG in getTargetApps(), filtered the list of apps for organisation: ' + organisation + ' filtered list: ' + apps);
+        }
+
+        return apps;
+    });
+
 }
 
 
 function deploySlug(slug, targetApps) {
     if (debug === 'true') {
-        console.log('DEBUG in deploySlug(), will deploy slug: ' + slug + ' to list: ' + targetApps);
+        console.log('DEBUG in deploySlug(), preparing to deploy slug: ' + slug + ' to list: ' + targetApps);
     }
 
     if (targetApps.length === 0) {
@@ -156,11 +151,11 @@ function performDeploy(slug, app) {
     var rehearsal = process.env.DEPLOY_REHEARSAL;
 
     if (rehearsal === 'true') {
-        console.log("** Rehearsal mode ** ... would deploy slug " + slug + " to " + app);
+        console.log("** Rehearsal mode ** ... would deploy slug " + slug + " to " + app.name);
         return 0;
     }
 
-    var postUrl = '/apps/' + app + '/releases/';
+    var postUrl = '/apps/' + app.name + '/releases/';
 
     if (debug === 'true') {
         console.log('DEBUG in performDeploy(), posting to: ' + postUrl);
@@ -168,7 +163,7 @@ function performDeploy(slug, app) {
 
     heroku.post(postUrl, { 'slug': slug }).then(function (newRelease) {
         console.log("User " + newRelease.user.email + " deployed slug " +
-            newRelease.slug.id + " to app " + app + " [created new app version " +
+            newRelease.slug.id + " to app " + app.name + " [created new app version " +
             newRelease.version + " (\'" + newRelease.description + "\')]");
 
         if (debug === 'true') {
@@ -184,21 +179,14 @@ function filterTargetApps(appList, regexFilter) {
     }
 
     if (!regexFilter) {
-        console.log('DEBUG in filterTargetApps(), nothing to do. Returning list: ' + appList);
+        console.log('DEBUG in filterTargetApps(), nothing to filter. Returning unfiltered list');
         return appList;
     }
 
-    var targetApps = lazy(appList).filter(function (name) {
+    var targetApps = lazy(appList).filter(function (app) {
 
         var matches = lazy(regexFilter).filter(function (regex) {
-            if (debug === 'true') {
-                console.log('DEBUG in filterTargetApps(), matching: ' + name + ' with regex: ' + regex);
-            }
-
-            if (name.match(regex)) {
-                if (debug === 'true') {
-                    console.log('DEBUG in filterTargetApps(), FOUND A MATCH between: ' + name + ' and regex: ' + regex);
-                }
+            if (app.name.match(regex)) {
                 return true;
             }
 
@@ -209,38 +197,5 @@ function filterTargetApps(appList, regexFilter) {
 
     }).toArray();
 
-    if (debug === 'true') {
-        console.log('DEBUG in filterTargetApps(). Returning filtered list: ' + targetApps);
-    }
-
     return targetApps;
 }
-
-// BIG MESS ... until Heroku supports getting the apps by organisation in the API, we will hack it...
-//
-// $ heroku apps --org ${org} | egrep -v "^$|${org}$" | awk '{ print $1 }' > /tmp/heroku-app-list.${org}
-//
-// will give us a list of app names for the $org into the file
-//
-// I am making this a deliberately ugly hard coded hack!!
-//
-// TODO: Refactor once this is in the API
-function getAppsForOrganisation(organisation) {
-    var fs = require('fs');
-
-    var appListFile = "/tmp/heroku-app-list." + organisation;
-
-    if (debug === 'true') {
-        console.log('DEBUG in getAppsForOrganisation(). Reading file with list of apps for ' + appListFile);
-    }
-
-    fs.existsSync(appListFile, function (exists) {
-        if (!exists) {
-            throw new Error('FAIL: Cannot find list of apps for ' + organisation + ' in ' + appListFile + ' - have you ran the hacky script?');
-        }
-    });
-
-    return fs.readFileSync(appListFile).toString().split("\n");
-}
-
-
