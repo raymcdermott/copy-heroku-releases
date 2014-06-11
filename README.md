@@ -1,4 +1,4 @@
-# copy-heroku-releases
+## copy-heroku-releases
 
 A node command line utility to copy Heroku slugs from one app to one or more other apps
 
